@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { billSchema, type BillInput } from "@/lib/validations";
 import { logActivity } from "@/lib/activity";
+import { ensureFeature } from "@/lib/entitlements";
 import type { ActionResult } from "@/lib/types";
 
 async function getUser() {
@@ -15,6 +16,9 @@ async function getUser() {
 }
 
 export async function createBill(input: BillInput): Promise<ActionResult> {
+  const guard = await ensureFeature("bills");
+  if (!guard.ok) return guard;
+
   const parsed = billSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -53,6 +57,9 @@ export async function updateBill(
   id: string,
   input: BillInput,
 ): Promise<ActionResult> {
+  const guard = await ensureFeature("bills");
+  if (!guard.ok) return guard;
+
   const parsed = billSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { reminderSchema, type ReminderInput } from "@/lib/validations";
 import { logActivity } from "@/lib/activity";
+import { hasFeature } from "@/lib/entitlements";
 import type { ActionResult } from "@/lib/types";
+import type { Recurrence } from "@/lib/constants";
 
 async function getUser() {
   const supabase = await createClient();
@@ -12,6 +14,15 @@ async function getUser() {
     data: { user },
   } = await supabase.auth.getUser();
   return { supabase, user };
+}
+
+/**
+ * Recurring ("smart") reminders are a Pro feature. For users below Pro we
+ * force recurrence to one-off, server-side, so the rule can't be bypassed.
+ */
+async function resolveRecurrence(requested: Recurrence): Promise<Recurrence> {
+  if (requested === "none") return "none";
+  return (await hasFeature("smart-reminders")) ? requested : "none";
 }
 
 export async function createReminder(
@@ -26,11 +37,12 @@ export async function createReminder(
   if (!user) return { ok: false, error: "Not authenticated" };
 
   const d = parsed.data;
+  const recurrence = await resolveRecurrence(d.recurrence);
   const { error } = await supabase.from("reminders").insert({
     user_id: user.id,
     title: d.title,
     due_date: d.dueDate,
-    recurrence: d.recurrence,
+    recurrence,
     priority: d.priority,
     notes: d.notes ?? null,
   });
@@ -62,12 +74,13 @@ export async function updateReminder(
   if (!user) return { ok: false, error: "Not authenticated" };
 
   const d = parsed.data;
+  const recurrence = await resolveRecurrence(d.recurrence);
   const { error } = await supabase
     .from("reminders")
     .update({
       title: d.title,
       due_date: d.dueDate,
-      recurrence: d.recurrence,
+      recurrence,
       priority: d.priority,
       notes: d.notes ?? null,
     })

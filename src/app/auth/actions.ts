@@ -5,12 +5,20 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema, signUpSchema } from "@/lib/validations";
 import { env } from "@/lib/env";
+import { clientKey, rateLimit } from "@/lib/rate-limit";
 import type { ActionResult } from "@/lib/types";
+
+const TOO_MANY = "Too many attempts. Please wait a minute and try again.";
 
 export async function login(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  // 10 attempts per minute per client IP.
+  if (!rateLimit(await clientKey("login"), 10, 60_000).ok) {
+    return { ok: false, error: TOO_MANY };
+  }
+
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
@@ -35,6 +43,11 @@ export async function signup(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  // 5 sign-ups per minute per client IP.
+  if (!rateLimit(await clientKey("signup"), 5, 60_000).ok) {
+    return { ok: false, error: TOO_MANY };
+  }
+
   const parsed = signUpSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),

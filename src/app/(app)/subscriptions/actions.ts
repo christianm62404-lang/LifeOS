@@ -7,6 +7,7 @@ import {
   type SubscriptionInput,
 } from "@/lib/validations";
 import { logActivity } from "@/lib/activity";
+import { ensureFeature } from "@/lib/entitlements";
 import type { ActionResult } from "@/lib/types";
 
 async function getUser() {
@@ -20,6 +21,9 @@ async function getUser() {
 export async function createSubscription(
   input: SubscriptionInput,
 ): Promise<ActionResult> {
+  const guard = await ensureFeature("subscriptions");
+  if (!guard.ok) return guard;
+
   const parsed = subscriptionSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -58,6 +62,9 @@ export async function updateSubscription(
   id: string,
   input: SubscriptionInput,
 ): Promise<ActionResult> {
+  const guard = await ensureFeature("subscriptions");
+  if (!guard.ok) return guard;
+
   const parsed = subscriptionSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };

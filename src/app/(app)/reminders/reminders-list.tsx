@@ -26,7 +26,13 @@ function priorityVariant(
   return "secondary";
 }
 
-export function RemindersList({ reminders }: { reminders: Reminder[] }) {
+export function RemindersList({
+  reminders,
+  canSmartReminders = false,
+}: {
+  reminders: Reminder[];
+  canSmartReminders?: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -114,6 +120,7 @@ export function RemindersList({ reminders }: { reminders: Reminder[] }) {
               <DropdownMenuContent align="end">
                 <ReminderDialog
                   reminder={reminder}
+                  canSmartReminders={canSmartReminders}
                   trigger={
                     <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                       <Pencil className="h-4 w-4" /> Edit

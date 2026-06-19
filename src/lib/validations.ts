@@ -29,7 +29,12 @@ const isoDate = z.string().min(1, "Date is required");
 
 export const signUpSchema = z.object({
   email: z.string().trim().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(72, "Password is too long")
+    .regex(/[a-zA-Z]/, "Include at least one letter")
+    .regex(/[0-9]/, "Include at least one number"),
   fullName: z.string().trim().min(1, "Name is required").max(120),
 });
 export type SignUpInput = z.infer<typeof signUpSchema>;

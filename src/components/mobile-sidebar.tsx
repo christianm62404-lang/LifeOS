@@ -10,8 +10,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SidebarNav } from "@/components/sidebar-nav";
+import type { Tier } from "@/lib/billing";
 
-export function MobileSidebar() {
+export function MobileSidebar({ tier }: { tier: Tier }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -34,7 +35,7 @@ export function MobileSidebar() {
           </div>
           <span className="text-lg font-bold tracking-tight">LifeOS</span>
         </div>
-        <SidebarNav onNavigate={() => setOpen(false)} />
+        <SidebarNav tier={tier} onNavigate={() => setOpen(false)} />
       </SheetContent>
     </Sheet>
   );

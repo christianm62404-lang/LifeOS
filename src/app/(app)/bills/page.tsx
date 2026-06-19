@@ -7,12 +7,26 @@ import type { Bill } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
+import { UpgradeGate } from "@/components/upgrade-gate";
+import { hasFeature } from "@/lib/entitlements";
 import { BillDialog } from "./bill-dialog";
 import { BillsList } from "./bills-list";
 
 export const metadata: Metadata = { title: "Bills — LifeOS" };
 
 export default async function BillsPage() {
+  if (!(await hasFeature("bills"))) {
+    return (
+      <div>
+        <PageHeader
+          title="Bills"
+          description="Track due dates, recurrence and autopay across every bill."
+        />
+        <UpgradeGate feature="bills" />
+      </div>
+    );
+  }
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("bills")

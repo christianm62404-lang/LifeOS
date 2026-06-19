@@ -7,12 +7,26 @@ import type { Subscription } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
+import { UpgradeGate } from "@/components/upgrade-gate";
+import { hasFeature } from "@/lib/entitlements";
 import { SubscriptionDialog } from "./subscription-dialog";
 import { SubscriptionsList } from "./subscriptions-list";
 
 export const metadata: Metadata = { title: "Subscriptions — LifeOS" };
 
 export default async function SubscriptionsPage() {
+  if (!(await hasFeature("subscriptions"))) {
+    return (
+      <div>
+        <PageHeader
+          title="Subscriptions"
+          description="Track recurring subscriptions and see your monthly spend."
+        />
+        <UpgradeGate feature="subscriptions" />
+      </div>
+    );
+  }
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("subscriptions")

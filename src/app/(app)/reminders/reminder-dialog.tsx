@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { reminderSchema, type ReminderInput } from "@/lib/validations";
 import {
@@ -42,9 +43,12 @@ function toDateInput(value: string): string {
 export function ReminderDialog({
   reminder,
   trigger,
+  canSmartReminders = false,
 }: {
   reminder?: Reminder;
   trigger?: React.ReactNode;
+  /** Recurring reminders are a Pro feature; disabled otherwise. */
+  canSmartReminders?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -163,6 +167,7 @@ export function ReminderDialog({
             <Label>Recurrence</Label>
             <Select
               value={watch("recurrence")}
+              disabled={!canSmartReminders}
               onValueChange={(v) =>
                 setValue("recurrence", v as ReminderInput["recurrence"])
               }
@@ -178,6 +183,15 @@ export function ReminderDialog({
                 ))}
               </SelectContent>
             </Select>
+            {!canSmartReminders && (
+              <p className="text-xs text-muted-foreground">
+                Smart recurring reminders are a{" "}
+                <Link href="/billing" className="font-medium underline">
+                  Pro
+                </Link>{" "}
+                feature.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

@@ -6,12 +6,26 @@ import type { DocumentRecord } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
+import { UpgradeGate } from "@/components/upgrade-gate";
+import { hasFeature } from "@/lib/entitlements";
 import { DocumentDialog } from "./document-dialog";
 import { DocumentsList } from "./documents-list";
 
 export const metadata: Metadata = { title: "Documents — LifeOS" };
 
 export default async function DocumentsPage() {
+  if (!(await hasFeature("documents"))) {
+    return (
+      <div>
+        <PageHeader
+          title="Documents"
+          description="Keep important documents safe and track expiry dates."
+        />
+        <UpgradeGate feature="documents" />
+      </div>
+    );
+  }
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("documents")

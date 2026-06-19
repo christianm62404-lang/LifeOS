@@ -4,10 +4,41 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { documentSchema } from "@/lib/validations";
 import { logActivity } from "@/lib/activity";
+import { ensureFeature } from "@/lib/entitlements";
 import { env } from "@/lib/env";
 import type { ActionResult } from "@/lib/types";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+// Allowlist of safe document types — never accept executables/HTML/SVG, which
+// could be used for stored XSS or to trick users into running content.
+const ALLOWED_MIME = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+]);
+const ALLOWED_EXT = new Set([
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "doc",
+  "docx",
+  "txt",
+]);
+
+function isAllowedFile(file: File): boolean {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  // Require the extension to be allowed, and the MIME (when provided) to match.
+  if (!ALLOWED_EXT.has(ext)) return false;
+  if (file.type && !ALLOWED_MIME.has(file.type)) return false;
+  return true;
+}
 
 async function getUser() {
   const supabase = await createClient();
@@ -20,6 +51,9 @@ async function getUser() {
 export async function createDocument(
   formData: FormData,
 ): Promise<ActionResult> {
+  const guard = await ensureFeature("documents");
+  if (!guard.ok) return guard;
+
   const parsed = documentSchema.safeParse({
     title: formData.get("title"),
     documentType: formData.get("documentType"),
@@ -41,6 +75,12 @@ export async function createDocument(
   if (file instanceof File && file.size > 0) {
     if (file.size > MAX_FILE_SIZE) {
       return { ok: false, error: "File is larger than 10 MB" };
+    }
+    if (!isAllowedFile(file)) {
+      return {
+        ok: false,
+        error: "Unsupported file type. Allowed: PDF, image, Word or text.",
+      };
     }
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${user.id}/${Date.now()}-${safeName}`;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { BellRing, AlertTriangle, CalendarClock, Flag } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { hasFeature } from "@/lib/entitlements";
 import { daysUntil } from "@/lib/utils";
 import type { Reminder } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
@@ -20,6 +21,7 @@ export default async function RemindersPage() {
     .order("due_date", { ascending: true });
 
   const reminders = (data ?? []) as Reminder[];
+  const canSmartReminders = await hasFeature("smart-reminders");
 
   const openCount = reminders.filter((r) => !r.is_complete).length;
   const overdueCount = reminders.filter(
@@ -39,7 +41,7 @@ export default async function RemindersPage() {
         title="Reminders"
         description="Stay on top of recurring tasks like filters, registration and backups."
       >
-        <ReminderDialog />
+        <ReminderDialog canSmartReminders={canSmartReminders} />
       </PageHeader>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -69,10 +71,13 @@ export default async function RemindersPage() {
           title="No reminders yet"
           description="Add reminders for tasks like Replace air filter, Renew registration, Check smoke detectors or Back up laptop."
         >
-          <ReminderDialog />
+          <ReminderDialog canSmartReminders={canSmartReminders} />
         </EmptyState>
       ) : (
-        <RemindersList reminders={reminders} />
+        <RemindersList
+          reminders={reminders}
+          canSmartReminders={canSmartReminders}
+        />
       )}
     </div>
   );

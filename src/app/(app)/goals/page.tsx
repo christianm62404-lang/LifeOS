@@ -6,12 +6,26 @@ import type { Goal } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
+import { UpgradeGate } from "@/components/upgrade-gate";
+import { hasFeature } from "@/lib/entitlements";
 import { GoalDialog } from "./goal-dialog";
 import { GoalsList } from "./goals-list";
 
 export const metadata: Metadata = { title: "Goals — LifeOS" };
 
 export default async function GoalsPage() {
+  if (!(await hasFeature("goals"))) {
+    return (
+      <div>
+        <PageHeader
+          title="Goals"
+          description="Set measurable goals across finance, health, career, school and personal life."
+        />
+        <UpgradeGate feature="goals" />
+      </div>
+    );
+  }
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("goals")
