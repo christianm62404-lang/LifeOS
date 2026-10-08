@@ -12,12 +12,22 @@ export interface Marker {
   lost: boolean;
 }
 
+export interface OverlayRect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  color: readonly [number, number, number];
+}
+
 export interface Scene {
   particles?: Particles;
   bodies?: readonly RigidBody[];
   hero?: Hero;
   effects?: Effects;
   markers?: readonly Marker[];
+  rects?: readonly OverlayRect[];
+  spawn?: { x: number; y: number } | null;
 }
 
 // Original 8x12 hero sprite ("Emberkin"), 2 animation frames. '.'/' ' = clear.
@@ -142,6 +152,8 @@ export class Renderer {
 
     if (scene.bodies) this.drawBodies(scene.bodies);
     if (scene.particles) this.drawParticles(scene.particles);
+    if (scene.rects) for (const r of scene.rects) this.drawRectOutline(r);
+    if (scene.spawn) this.drawSpawn(scene.spawn.x, scene.spawn.y);
     if (scene.markers) this.drawMarkers(scene.markers);
     if (scene.hero) this.drawHero(scene.hero);
     if (scene.effects) this.drawEffects(scene.effects);
@@ -204,6 +216,35 @@ export class Renderer {
     if (hero.health < 35 && ((hero.animTime >> 3) & 1) === 0) {
       this.setPixel(left + 3, top - 2, 255, 60, 60);
       this.setPixel(left + 4, top - 2, 255, 60, 60);
+    }
+  }
+
+  private drawRectOutline(r: OverlayRect): void {
+    const [cr, cg, cb] = r.color;
+    const x0 = Math.min(r.x0, r.x1);
+    const x1 = Math.max(r.x0, r.x1);
+    const y0 = Math.min(r.y0, r.y1);
+    const y1 = Math.max(r.y0, r.y1);
+    for (let x = x0; x <= x1; x++) {
+      if ((x & 1) === 0) {
+        this.setPixel(x, y0, cr, cg, cb);
+        this.setPixel(x, y1, cr, cg, cb);
+      }
+    }
+    for (let y = y0; y <= y1; y++) {
+      if ((y & 1) === 0) {
+        this.setPixel(x0, y, cr, cg, cb);
+        this.setPixel(x1, y, cr, cg, cb);
+      }
+    }
+  }
+
+  private drawSpawn(x: number, y: number): void {
+    const cx = Math.round(x);
+    const cy = Math.round(y);
+    for (let d = -3; d <= 3; d++) {
+      this.setPixel(cx + d, cy, 120, 220, 255);
+      this.setPixel(cx, cy + d, 120, 220, 255);
     }
   }
 

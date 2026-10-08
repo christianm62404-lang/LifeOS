@@ -20,8 +20,10 @@ import { Menu, type MenuSection } from "./ui/menu.ts";
 import { MissionHud } from "./ui/mission-hud.ts";
 import { MISSIONS, type Mission } from "./mission/missions.ts";
 import { MissionController } from "./mission/runtime.ts";
+import { Editor } from "./editor/editor.ts";
+import { applyLevel, levelToMission, listLevels, type CustomLevel } from "./editor/level.ts";
 
-export type Scene = "menu" | "play";
+export type Scene = "menu" | "play" | "editor";
 
 /**
  * Top-level game controller. Owns the world, all systems, the hero, the render
@@ -48,6 +50,8 @@ export class Game {
   protected mission: MissionController | null = null;
   private activeMission: Mission | null = null;
   private paused = false;
+  protected readonly editor: Editor;
+  private editorLevel: CustomLevel | null = null;
 
   constructor() {
     const canvas = document.getElementById("screen") as HTMLCanvasElement;
@@ -76,6 +80,11 @@ export class Game {
     this.hud.setSelected(0);
     this.menu = new Menu();
     this.missionHud = new MissionHud();
+    this.editor = new Editor(canvas, this.world, {
+      onTest: (level) => this.testPlay(level),
+      onMenu: () => this.toMenu(),
+    });
+    this.editor.onImport = (level) => applyLevel(level, this.world);
 
     this.buildMenu();
     this.toMenu();
@@ -108,6 +117,21 @@ export class Game {
           onClick: () => this.startMission(m),
         })),
       },
+      {
+        title: "Create",
+        items: [
+          { label: "New Level", desc: "Open the editor on a blank canvas.", badge: "EDITOR", onClick: () => this.openEditorNew() },
+          ...(this.editorLevel
+            ? [{ label: "Resume Editing", desc: `Continue "${this.editorLevel.name}".`, onClick: () => this.openEditorWith(this.editorLevel!) }]
+            : []),
+          ...listLevels().map((lv) => ({
+            label: lv.name,
+            desc: "Saved level — edit or test.",
+            badge: "SAVED",
+            onClick: () => this.openEditorWith(lv),
+          })),
+        ],
+      },
     ];
     this.menu.render(sections);
   }
@@ -118,7 +142,45 @@ export class Game {
     this.mission = null;
     this.activeMission = null;
     this.missionHud.hide();
+    this.editor.deactivate();
+    this.buildMenu(); // refresh saved-level list
     this.menu.show();
+  }
+
+  openEditorNew(): void {
+    this.resetSystems();
+    this.editor.resetLevel();
+    this.enterEditor();
+  }
+
+  openEditorWith(level: CustomLevel): void {
+    this.resetSystems();
+    applyLevel(level, this.world);
+    this.editor.loadLevel(level);
+    this.editorLevel = level;
+    this.enterEditor();
+  }
+
+  private enterEditor(): void {
+    this.mission = null;
+    this.missionHud.hide();
+    this.scene = "editor";
+    this.paused = false;
+    this.menu.hide();
+    this.editor.activate();
+  }
+
+  private testPlay(level: CustomLevel): void {
+    this.editorLevel = level;
+    this.editor.deactivate();
+    this.startMission(levelToMission(level));
+  }
+
+  private resetSystems(): void {
+    this.world.reset();
+    this.particles.reset();
+    this.collapse.reset();
+    this.effects.reset();
   }
 
   startFreePlay(def: WorldDef): void {
@@ -251,6 +313,12 @@ export class Game {
   }
 
   protected render(): void {
+    if (this.scene === "editor") {
+      const ov = this.editor.overlay();
+      this.renderer.render({ rects: ov.rects, spawn: ov.spawn, markers: ov.markers });
+      this.stage.style.transform = "";
+      return;
+    }
     this.renderer.render({
       particles: this.particles,
       bodies: this.collapse.bodies,

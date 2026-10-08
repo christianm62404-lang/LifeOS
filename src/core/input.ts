@@ -110,6 +110,11 @@ export class Input {
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // Don't hijack keys while typing into an editor field.
+    const el = document.activeElement;
+    if (el && (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA")) {
+      return;
+    }
     audio.resume();
     const k = e.key.toLowerCase();
     if (k === "escape") {
