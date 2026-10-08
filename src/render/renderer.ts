@@ -1,6 +1,38 @@
 import { World } from "../sim/world.ts";
 import { MATERIALS } from "../sim/materials.ts";
 import { Particles } from "../sim/particles.ts";
+import type { RigidBody } from "../sim/collapse.ts";
+import type { Effects } from "../core/effects.ts";
+import { Hero, HERO_H, HERO_W } from "../entity/hero.ts";
+
+export interface Scene {
+  particles?: Particles;
+  bodies?: readonly RigidBody[];
+  hero?: Hero;
+  effects?: Effects;
+}
+
+// Original 8x12 hero sprite ("Emberkin"). '.'/' ' = transparent.
+const HERO_SPRITE = [
+  "   SS   ",
+  "  SSSS  ",
+  "  SKKS  ",
+  "   KK   ",
+  " CSSSSC ",
+  " CSSSSC ",
+  " CSSSSC ",
+  "  SSSS  ",
+  "  S  S  ",
+  "  B  B  ",
+  "  B  B  ",
+  " BB  BB ",
+];
+const HERO_COLORS: Record<string, [number, number, number]> = {
+  S: [84, 96, 214], // suit (indigo)
+  K: [232, 188, 150], // skin
+  C: [214, 66, 92], // cape (crimson)
+  B: [245, 206, 92], // boots/gloves (gold)
+};
 
 /**
  * Framebuffer renderer. Fills an ImageData the size of the world from the
@@ -51,7 +83,7 @@ export class Renderer {
     }
   }
 
-  render(particles?: Particles): void {
+  render(scene: Scene = {}): void {
     const { mat, shade, temp } = this.world;
     const buf = this.buf;
     const { lutR, lutG, lutB, lutGlow } = this;
@@ -83,9 +115,91 @@ export class Renderer {
       buf[p + 2] = clamp(b);
     }
 
-    if (particles) this.drawParticles(particles);
+    if (scene.bodies) this.drawBodies(scene.bodies);
+    if (scene.particles) this.drawParticles(scene.particles);
+    if (scene.hero) this.drawHero(scene.hero);
+    if (scene.effects) this.drawEffects(scene.effects);
 
     this.ctx.putImageData(this.image, 0, 0);
+  }
+
+  private setPixel(x: number, y: number, r: number, g: number, b: number): void {
+    if (x < 0 || y < 0 || x >= this.world.w || y >= this.world.h) return;
+    const p = (y * this.world.w + x) * 4;
+    this.buf[p] = clamp(r);
+    this.buf[p + 1] = clamp(g);
+    this.buf[p + 2] = clamp(b);
+  }
+
+  private drawBodies(bodies: readonly RigidBody[]): void {
+    const { lutR, lutG, lutB } = this;
+    for (const body of bodies) {
+      const ox = Math.round(body.ox);
+      const oy = Math.round(body.oy);
+      for (let k = 0; k < body.n; k++) {
+        const m = body.mat[k];
+        const s = body.shade[k] >> 3;
+        this.setPixel(ox + body.dx[k], oy + body.dy[k], lutR[m] + s, lutG[m] + s, lutB[m] + s);
+      }
+    }
+  }
+
+  private drawHero(hero: Hero): void {
+    const left = Math.round(hero.cx - HERO_W / 2);
+    const top = Math.round(hero.cy - HERO_H / 2);
+    const flip = hero.facing < 0;
+    for (let row = 0; row < HERO_SPRITE.length; row++) {
+      const line = HERO_SPRITE[row];
+      for (let col = 0; col < HERO_W; col++) {
+        const ch = line[flip ? HERO_W - 1 - col : col];
+        const color = ch && HERO_COLORS[ch];
+        if (color) this.setPixel(left + col, top + row, color[0], color[1], color[2]);
+      }
+    }
+    // Low-health tint overlay.
+    if (hero.health < 35) {
+      this.setPixel(left + 3, top - 2, 255, 60, 60);
+      this.setPixel(left + 4, top - 2, 255, 60, 60);
+    }
+  }
+
+  private drawEffects(effects: Effects): void {
+    for (const s of effects.segments) {
+      const a = s.ttl / s.maxTtl;
+      this.drawLine(
+        Math.round(s.x0),
+        Math.round(s.y0),
+        Math.round(s.x1),
+        Math.round(s.y1),
+        s.r * a + 40,
+        s.g * a + 40,
+        s.b * a + 40,
+      );
+    }
+  }
+
+  private drawLine(x0: number, y0: number, x1: number, y1: number, r: number, g: number, b: number): void {
+    // Integer Bresenham.
+    const dx = Math.abs(x1 - x0);
+    const dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    let x = x0;
+    let y = y0;
+    for (let guard = 0; guard < 2048; guard++) {
+      this.setPixel(x, y, r, g, b);
+      if (x === x1 && y === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        x += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y += sy;
+      }
+    }
   }
 
   private drawParticles(particles: Particles): void {

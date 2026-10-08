@@ -18,6 +18,7 @@ export function explode(
   radius: number,
   power: number,
   rng: Rng,
+  heatFactor = 1,
 ): void {
   const r2 = radius * radius;
   for (let dy = -radius; dy <= radius; dy++) {
@@ -34,8 +35,8 @@ export function explode(
       const i = world.idx(x, y);
       const m = world.mat[i];
 
-      // Heat everything in range (center hottest).
-      world.temp[i] += impulse * 7;
+      // Heat everything in range (center hottest). heatFactor=0 → kinetic only.
+      world.temp[i] += impulse * 7 * heatFactor;
       world.touch(x, y);
 
       if (m === ID.AIR) continue;
@@ -66,8 +67,8 @@ export function explode(
     }
   }
 
-  // Core flash: a few fire cells for the initial burst.
-  const flashR = Math.max(1, (radius / 4) | 0);
+  // Core flash: a few fire cells for the initial burst (skip for kinetic blasts).
+  const flashR = heatFactor > 0.3 ? Math.max(1, (radius / 4) | 0) : 0;
   for (let dy = -flashR; dy <= flashR; dy++) {
     for (let dx = -flashR; dx <= flashR; dx++) {
       if (dx * dx + dy * dy > flashR * flashR) continue;

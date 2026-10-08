@@ -45,3 +45,19 @@ export const MAX_PARTICLES = 6000;
 
 /** Downward acceleration applied to airborne debris per tick. */
 export const PARTICLE_GRAVITY = 0.18;
+
+// --- structural collapse -------------------------------------------------
+
+/** Connected-solid components larger than this are treated as anchored
+ * terrain (bounds the flood-fill cost; the ground never "falls"). */
+export const MAX_COMPONENT = 3000;
+
+/** Max simultaneous rigid bodies in flight. */
+export const MAX_BODIES = 64;
+
+/** Collapse-check regions processed per tick (bounds per-frame work). */
+export const MAX_REGIONS_PER_TICK = 6;
+
+/** Gravity + terminal fall speed for rigid bodies (cells/tick). */
+export const BODY_GRAVITY = 0.22;
+export const BODY_MAX_FALL = 7;

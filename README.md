@@ -7,9 +7,9 @@ floods, freezes, burns and collapses according to real rules.
 Original name, art and code. No game engine — TypeScript + Vite, rendering to a
 single canvas.
 
-> **Status: Phase 2 complete** — temperature diffusion, the full material set,
-> data-driven phase changes, fire, and explosions with debris particles, on top
-> of the Phase 1 grid/renderer/chunk-sleeping foundation.
+> **Status: Phase 4 complete** — the flying superhero and all nine elemental
+> powers, plus Phase 3's rigid-chunk structural collapse, on top of the
+> Phase 1–2 cellular simulation (temperature, materials, fire, explosions).
 
 ---
 
@@ -31,11 +31,29 @@ npm run typecheck  # tsc --noEmit
 
 ## Controls
 
+Two modes, toggled with **Tab**:
+
+**Hero mode** (default) — play as the flying hero, *Emberkin*:
+
+| Input | Action |
+| --- | --- |
+| **WASD / arrows** | Fly (momentum-based) |
+| **Mouse** | Aim |
+| **Left mouse** | Use the selected power |
+| **1–9** or **wheel** | Switch power |
+| **Middle mouse** | Explode at the cursor |
+
+Powers: **1** Heat Beam · **2** Freeze Breath · **3** Water Jet ·
+**4** Lava Eruption · **5** Earth Raise · **6** Quake · **7** Lightning ·
+**8** Wind Gust · **9** Ground Slam.
+
+**Paint mode** — the material sandbox:
+
 | Input | Action |
 | --- | --- |
 | **Left mouse** | Paint the selected material |
 | **Right mouse** | Erase (paint air) |
-| **1–9** or **mouse wheel** | Switch material |
+| **1–9** or **wheel** | Switch material |
 | **`[` / `]`** | Shrink / grow the brush |
 | **X** or **middle mouse** | Explode at the cursor |
 
@@ -52,6 +70,9 @@ Things to try:
 - **Explode** (X) a hillside → solids shatter into flying debris that falls and
   re-settles into the grid; screen shake on the blast.
 - Melt **sand** with lava/heat → it fuses into **glass**.
+- **Undermine a structure** (erase/ground-slam its base) → the disconnected top
+  detaches, falls as a rigid chunk, and shatters back into cells on impact.
+- Fly into **lava** or deep **water** → watch the HP bar drop (then regen when safe).
 - Watch the HUD: idle regions drop out of "chunks awake" and sim ms falls to ~0.
 
 ---
@@ -70,15 +91,21 @@ src/
 │   ├── simulation.ts        # two-pass update: thermal/reactions, then movement
 │   ├── particles.ts         # debris pool (SoA) that re-enters the grid
 │   ├── explosion.ts         # radial shatter + heat + debris
+│   ├── collapse.ts          # connectivity flood-fill -> falling rigid bodies
 │   └── worldgen.ts          # starter scene
+├── entity/
+│   ├── hero.ts              # flying hero: movement, AABB collision, health
+│   └── powers.ts            # the 9 elemental powers (data-driven table)
 ├── render/
-│   └── renderer.ts          # framebuffer -> canvas (ImageData + CSS pixelated scale)
+│   └── renderer.ts          # framebuffer -> canvas; draws cells, bodies, hero, FX
 ├── core/
 │   ├── loop.ts              # fixed-timestep loop (60 Hz sim, rAF render) + profiling
-│   ├── input.ts             # pointer/keyboard -> paint intent
+│   ├── input.ts             # pointer/keyboard -> hero + paint intent
+│   ├── effects.ts           # transient beam/bolt overlay
+│   ├── fx.ts                # screen-shake trauma
 │   └── rng.ts               # deterministic PRNG
 ├── ui/
-│   └── hud.ts               # DOM overlay: stats, palette, help
+│   └── hud.ts               # DOM overlay: stats, health, palette, help
 └── main.ts                  # wires everything together
 ```
 
@@ -127,6 +154,27 @@ src/
 - Hot materials **glow** in the renderer (temperature-driven), and blasts
   trigger screen shake.
 
+### Structural collapse (Phase 3)
+
+When solids are damaged, the affected region is queued for a connectivity check.
+A flood-fill walks each connected-solid component; any component that no longer
+reaches the world floor (its anchor) is lifted out of the grid into a **rigid
+body** that falls under gravity and shatters back into cells on impact. Cost is
+bounded: only damaged regions are checked (never the whole world), each
+component floods at most `MAX_COMPONENT` cells (so the ground is permanently
+anchored), and only a few regions are processed per tick.
+
+### Hero & powers (Phase 4)
+
+The hero is an 8×12 flying sprite with momentum flight, AABB collision against
+solids, and health drained by heat, lava/fire, drowning and crushing (regen when
+safe). Every power acts directly on the simulation and lives in a data table
+(`powers.ts`): **Heat Beam** (melts), **Freeze Breath** (freezes), **Water Jet**
+(emits water particles), **Lava Eruption**, **Earth Raise** (rock pillar),
+**Quake** (destabilises structures → collapse), **Lightning** (conducts through
+connected metal/water), **Wind Gust** (blows powders/liquids/gases as
+particles), **Ground Slam** (kinetic, fireless shatter + collapse).
+
 ### Rendering
 
 An `ImageData` the size of the world is filled from the material colour table
@@ -151,7 +199,7 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
 
 ## Tests
 
-`npm run test` (25 tests) covers the physics and systems:
+`npm run test` (35 tests) covers the physics and systems:
 
 - **Movement:** powder falls/piles/conserves mass/forms a slope; water spreads
   to level and conserves volume; density displacement (sand sinks through water;
@@ -163,6 +211,11 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
 - **Reactions:** lava + water → rock + steam, in either neighbour order.
 - **Explosions:** weak material shatters, material stronger than the impulse is
   spared, debris enters the particle pool.
+- **Collapse:** a floating component detaches into a body, an anchored one does
+  not, blowing out a tower's base collapses its top, a fallen body re-enters the
+  grid as cells.
+- **Hero:** momentum movement, can't pass solids/walls, takes lava damage,
+  regenerates when safe, respawns on death.
 
 ---
 
@@ -172,8 +225,8 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
    sleeping, fps counter.
 2. **Phase 2 (done)** — temperature, all materials, phase changes, fire,
    explosions + debris particles.
-3. Phase 3 — rigid-chunk structural collapse.
-4. Phase 4 — superhero movement and all elemental powers.
+3. **Phase 3 (done)** — rigid-chunk structural collapse.
+4. **Phase 4 (done)** — superhero movement and all nine elemental powers.
 5. Phase 5 — procedural worlds, HUD, menus, synthesized audio.
 6. Phase 6 — data-driven mission system + first 6 missions.
 7. Phase 7 — level editor with save / load / share.
