@@ -1,0 +1,19 @@
+{
+  "name": "shattersand",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ShatterSand — a 2D superhero destruction sandbox where the whole world is a falling-sand cellular simulation.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
