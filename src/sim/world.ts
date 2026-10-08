@@ -1,5 +1,5 @@
-import { CHUNK_SIZE, WORLD_H, WORLD_W } from "./constants.ts";
-import { ID } from "./materials.ts";
+import { AMBIENT_TEMP, CHUNK_SIZE, WORLD_H, WORLD_W } from "./constants.ts";
+import { material } from "./materials.ts";
 import { Rng } from "../core/rng.ts";
 
 /**
@@ -25,8 +25,10 @@ export class World {
   readonly shade: Int8Array;
   /** Temperature per cell (Celsius-ish). Unused in Phase 1 but allocated. */
   readonly temp: Float32Array;
-  /** Reserved bit-flags per cell (burning, anchored, ...). Phase 2+. */
+  /** Reserved bit-flags per cell (anchored, ...). Phase 3+. */
   readonly flags: Uint8Array;
+  /** Small per-cell scratch state (e.g. fire/smoke remaining lifetime). */
+  readonly aux: Uint8Array;
 
   /** Tick index at which each cell last moved, to prevent double updates. */
   private readonly movedTick: Uint32Array;
@@ -51,8 +53,9 @@ export class World {
     const n = w * h;
     this.mat = new Uint8Array(n);
     this.shade = new Int8Array(n);
-    this.temp = new Float32Array(n);
+    this.temp = new Float32Array(n).fill(AMBIENT_TEMP);
     this.flags = new Uint8Array(n);
+    this.aux = new Uint8Array(n);
     this.movedTick = new Uint32Array(n);
 
     const c = this.chunksW * this.chunksH;
@@ -155,20 +158,43 @@ export class World {
     const f = this.flags[a];
     this.flags[a] = this.flags[b];
     this.flags[b] = f;
+    const x = this.aux[a];
+    this.aux[a] = this.aux[b];
+    this.aux[b] = x;
     this.markMoved(a);
     this.markMoved(b);
     this.touch(ax, ay);
     this.touch(bx, by);
   }
 
-  /** Set a cell directly, assigning a fresh colour jitter, and wake it. */
+  /**
+   * Set a cell from the brush: assigns fresh colour jitter, a sensible starting
+   * temperature (a heat/cold source starts at its source temp) and lifetime,
+   * and wakes the cell.
+   */
   paint(x: number, y: number, matId: number): void {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
     const i = y * this.w + x;
+    const m = material(matId);
     this.mat[i] = matId;
-    this.shade[i] = (this.rng.int(255) - 128) as number;
-    if (matId === ID.AIR) this.temp[i] = 20;
+    this.shade[i] = this.rng.int(255) - 128;
+    this.temp[i] = m.sourceTemp ?? AMBIENT_TEMP;
+    this.aux[i] = m.life ?? 0;
     this.touch(x, y);
+  }
+
+  /**
+   * Convert an existing cell to another material in place (phase change /
+   * reaction). Keeps temperature by default, refreshes shade + lifetime, and
+   * wakes the cell. Used by the simulation, not the brush.
+   */
+  convert(i: number, matId: number, temp?: number): void {
+    const m = material(matId);
+    this.mat[i] = matId;
+    this.shade[i] = this.rng.int(255) - 128;
+    this.aux[i] = m.life ?? 0;
+    if (temp !== undefined) this.temp[i] = temp;
+    this.touch(i % this.w, (i / this.w) | 0);
   }
 
   /** Circular brush paint. */

@@ -7,9 +7,9 @@ floods, freezes, burns and collapses according to real rules.
 Original name, art and code. No game engine — TypeScript + Vite, rendering to a
 single canvas.
 
-> **Status: Phase 1 complete** — grid, renderer, sand/water/rock(/dirt), mouse
-> painting, chunk sleeping, and an fps/profiling HUD. Built to be extended phase
-> by phase (see roadmap below).
+> **Status: Phase 2 complete** — temperature diffusion, the full material set,
+> data-driven phase changes, fire, and explosions with debris particles, on top
+> of the Phase 1 grid/renderer/chunk-sleeping foundation.
 
 ---
 
@@ -29,18 +29,30 @@ npm run test       # unit tests (Vitest)
 npm run typecheck  # tsc --noEmit
 ```
 
-## Controls (Phase 1)
+## Controls
 
 | Input | Action |
 | --- | --- |
 | **Left mouse** | Paint the selected material |
 | **Right mouse** | Erase (paint air) |
-| **1–5** or **mouse wheel** | Switch material |
+| **1–9** or **mouse wheel** | Switch material |
 | **`[` / `]`** | Shrink / grow the brush |
+| **X** or **middle mouse** | Explode at the cursor |
 
-Try: pour sand into the water pool and watch it sink; carve a hole in a pool
-wall and let it drain; bury the dune; watch the HUD — idle regions drop out of
-"chunks awake" and sim time falls to ~0.
+Materials: sand, water, rock, dirt, wood, metal, lava, ice, fire, steam, air.
+
+Things to try:
+- Pour **water** onto the **lava** pocket → it flashes to **steam** and the lava
+  quenches to **rock**.
+- Drop **fire** on the **wooden shack** → it catches, spreads, and leaves
+  **smoke** that rises and dissipates.
+- Bury the **metal** beam in **lava** → it melts to molten metal, then
+  resolidifies as it cools.
+- Splash **water** on the **ice** block, or heat the ice → it melts and drips.
+- **Explode** (X) a hillside → solids shatter into flying debris that falls and
+  re-settles into the grid; screen shake on the blast.
+- Melt **sand** with lava/heat → it fuses into **glass**.
+- Watch the HUD: idle regions drop out of "chunks awake" and sim ms falls to ~0.
 
 ---
 
@@ -55,8 +67,10 @@ src/
 │   ├── constants.ts         # world size & timestep — fixed constants
 │   ├── materials.ts         # THE material data table (ids, state, density, colour)
 │   ├── world.ts             # typed-array cell storage + chunk sleeping
-│   ├── simulation.ts        # fixed-step update rules (powder / liquid / displacement)
-│   └── worldgen.ts          # Phase 1 starter scene
+│   ├── simulation.ts        # two-pass update: thermal/reactions, then movement
+│   ├── particles.ts         # debris pool (SoA) that re-enters the grid
+│   ├── explosion.ts         # radial shatter + heat + debris
+│   └── worldgen.ts          # starter scene
 ├── render/
 │   └── renderer.ts          # framebuffer -> canvas (ImageData + CSS pixelated scale)
 ├── core/
@@ -87,10 +101,31 @@ src/
   per-cell "moved this tick" guard prevents a cell being advanced twice.
 - **Movement rules (data-driven by `state` + `density`):**
   - *Powder* (sand, dirt): falls down, then diagonally down.
-  - *Liquid* (water): falls down/diagonally, then disperses sideways (bounded).
+  - *Liquid* (water, lava, molten metal): falls, then disperses sideways by a
+    per-material `fluidity` (water runny, lava viscous).
+  - *Gas* (steam, smoke): rises and drifts; `floats:false` fire sits on its fuel.
   - *Displacement:* a denser mobile cell sinks through a lighter liquid/gas by
-    swapping — so sand sinks through water and the water rises.
-  - *Solid* (rock) and *gas* (air) are inert in Phase 1.
+    swapping (sand sinks through water); gases rise through heavier fluids.
+  - *Solid* (rock, metal, ice, glass, wood) doesn't move.
+
+### Temperature & reactions (Phase 2)
+
+- Each active cell diffuses heat with its neighbours (rate ∝ `conductivity`),
+  relaxes toward ambient, and — if it's a source (`sourceTemp`) — drives its own
+  temperature (lava hot, ice cold, fire hot). A chunk only stays awake while its
+  temperature is still changing, so thermal equilibrium sleeps.
+- **Phase changes** are pure data on the material: cross `highAbove`→`highTo`
+  (ice→water, water→steam, sand→glass, metal→molten, rock→lava, wood→fire) or
+  `lowBelow`→`lowTo` (water→ice, steam→water, lava→rock, molten→metal). Fire and
+  smoke decay over time (`life`/`decayTo`).
+- **Contact reactions** live in a `REACTIONS` table, e.g. lava + water →
+  rock + steam, molten metal + water → metal + steam (quench). Checked both
+  orderings; only materials flagged reactive pay the neighbour-scan cost.
+- **Explosions** deposit radial heat and shatter solids whose `strength` is
+  below the local impulse, throwing debris **particles** (a typed-array pool)
+  that fly in continuous space and re-enter the grid where they land.
+- Hot materials **glow** in the renderer (temperature-driven), and blasts
+  trigger screen shake.
 
 ### Rendering
 
@@ -116,14 +151,18 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
 
 ## Tests
 
-`npm run test` covers the Phase 1 physics and the chunk system:
+`npm run test` (25 tests) covers the physics and systems:
 
-- powder falls, piles, conserves mass, forms a slope;
-- water spreads to level and conserves volume;
-- density displacement (sand sinks through water; sand can't pass solid rock);
-- chunk sleeping: correct chunk wakes, border neighbours wake, untouched world
-  sleeps, activity doesn't persist without a touch;
-- world storage swap + moved-tick bookkeeping.
+- **Movement:** powder falls/piles/conserves mass/forms a slope; water spreads
+  to level and conserves volume; density displacement (sand sinks through water;
+  sand can't pass solid rock).
+- **Chunk sleeping:** correct chunk wakes, border neighbours wake, untouched
+  world sleeps, activity doesn't persist without a touch; swap + moved-tick.
+- **Thermal:** metal↔molten, ice↔water, water↔steam, sand→glass, wood→fire
+  phase changes; fire decays to smoke.
+- **Reactions:** lava + water → rock + steam, in either neighbour order.
+- **Explosions:** weak material shatters, material stronger than the impulse is
+  spared, debris enters the particle pool.
 
 ---
 
@@ -131,7 +170,8 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
 
 1. **Phase 1 (done)** — grid, renderer, sand/water/rock, painting, chunk
    sleeping, fps counter.
-2. Phase 2 — temperature, all materials, phase changes, fire, explosions.
+2. **Phase 2 (done)** — temperature, all materials, phase changes, fire,
+   explosions + debris particles.
 3. Phase 3 — rigid-chunk structural collapse.
 4. Phase 4 — superhero movement and all elemental powers.
 5. Phase 5 — procedural worlds, HUD, menus, synthesized audio.

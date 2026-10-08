@@ -57,10 +57,42 @@ export function generateStarterWorld(world: World, seed = 2024): void {
     }
   }
 
+  // A small wooden shack (burn it down) sitting on the ground, left-centre.
+  const shackX = Math.floor(w * 0.4);
+  const shackY = groundAt(shackX);
+  for (let y = shackY - 18; y < shackY; y++) {
+    for (let x = shackX; x < shackX + 20; x++) {
+      const edge = x === shackX || x === shackX + 19 || y === shackY - 18;
+      if (edge && world.inBounds(x, y)) world.paint(x, y, ID.WOOD);
+    }
+  }
+
+  // A metal beam you can melt with lava/heat, mid-left.
+  const beamY = Math.floor(h * 0.5);
+  for (let x = Math.floor(w * 0.08); x < Math.floor(w * 0.2); x++) {
+    world.paint(x, beamY, ID.METAL);
+    world.paint(x, beamY + 1, ID.METAL);
+  }
+
+  // An ice block up high (melts if heated, drips water).
+  const iceX = Math.floor(w * 0.5);
+  for (let y = Math.floor(h * 0.18); y < Math.floor(h * 0.18) + 12; y++) {
+    for (let x = iceX; x < iceX + 14; x++) world.paint(x, y, ID.ICE);
+  }
+
+  // A lava pocket nestled in the ground, right of centre (feeds the pool side).
+  const lavaX = Math.floor(w * 0.52);
+  const lavaGround = groundAt(lavaX);
+  for (let y = lavaGround + 4; y < lavaGround + 14; y++) {
+    for (let x = lavaX - 10; x < lavaX + 10; x++) {
+      if (world.inBounds(x, y)) world.paint(x, y, ID.LAVA);
+    }
+  }
+
   // Scatter a few sand blobs mid-air so there's immediate motion on load.
   for (let b = 0; b < 6; b++) {
-    const bx = Math.floor(w * 0.3) + rng.int(Math.floor(w * 0.25));
-    const by = Math.floor(h * 0.12) + rng.int(Math.floor(h * 0.2));
+    const bx = Math.floor(w * 0.3) + rng.int(Math.floor(w * 0.2));
+    const by = Math.floor(h * 0.1) + rng.int(Math.floor(h * 0.12));
     world.paintCircle(bx, by, 3 + rng.int(4), ID.SAND);
   }
 

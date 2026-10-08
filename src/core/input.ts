@@ -20,6 +20,7 @@ export class Input {
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly onSelect: (paletteIndex: number) => void,
+    private readonly onExplode: (wx: number, wy: number) => void,
   ) {
     canvas.addEventListener("pointerdown", this.onPointerDown);
     window.addEventListener("pointerup", this.onPointerUp);
@@ -42,8 +43,14 @@ export class Input {
 
   private onPointerDown = (e: PointerEvent): void => {
     this.updatePos(e);
-    if (e.button === 2) this.erasing = true;
-    else this.painting = true;
+    if (e.button === 1) {
+      e.preventDefault();
+      this.onExplode(this.wx, this.wy); // middle click = detonate
+    } else if (e.button === 2) {
+      this.erasing = true;
+    } else {
+      this.painting = true;
+    }
   };
 
   private onPointerUp = (): void => {
@@ -69,6 +76,8 @@ export class Input {
       this.brush = Math.max(1, this.brush - 1);
     } else if (e.key === "]") {
       this.brush = Math.min(40, this.brush + 1);
+    } else if (e.key === "x" || e.key === "X") {
+      this.onExplode(this.wx, this.wy); // detonate at cursor
     }
   };
 

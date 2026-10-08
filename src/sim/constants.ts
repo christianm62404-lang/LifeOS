@@ -23,3 +23,25 @@ export const SIM_DT = 1 / SIM_HZ;
 
 /** Safety cap so a slow frame can't trigger a death-spiral of catch-up steps. */
 export const MAX_STEPS_PER_FRAME = 5;
+
+// --- thermal model -------------------------------------------------------
+
+/** Resting temperature the world relaxes toward (degrees, arbitrary scale). */
+export const AMBIENT_TEMP = 20;
+
+/** Per-tick pull of every active cell toward ambient (gentle global cooling). */
+export const AMBIENT_RATE = 0.0016;
+
+/** Diffusion scale applied on top of a material's conductivity (keeps k<0.25). */
+export const DIFFUSION_SCALE = 0.8;
+
+/** Minimum per-tick temperature change that keeps a chunk awake. */
+export const TEMP_WAKE_EPSILON = 0.35;
+
+// --- particles -----------------------------------------------------------
+
+/** Max simultaneous debris particles (typed-array pool, no per-particle GC). */
+export const MAX_PARTICLES = 6000;
+
+/** Downward acceleration applied to airborne debris per tick. */
+export const PARTICLE_GRAVITY = 0.18;
