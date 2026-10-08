@@ -4,6 +4,7 @@ import { ID } from "../sim/materials.ts";
 import { SIM_DT } from "../sim/constants.ts";
 import { audio } from "../core/audio.ts";
 import type { Mission } from "./missions.ts";
+import type { PlayController } from "../scene.ts";
 import {
   captureBaseline,
   evaluateObjective,
@@ -18,11 +19,15 @@ export type MissionStatus = "active" | "won" | "lost";
 const RESCUE_RADIUS = 11;
 
 /** Drives one mission: timing, civilian rescue, objective + fail evaluation. */
-export class MissionController {
+export class MissionController implements PlayController {
   readonly mission: Mission;
   status: MissionStatus = "active";
   failReason = "";
   private rt: MissionRuntime;
+
+  get name(): string {
+    return this.mission.name;
+  }
 
   constructor(mission: Mission, civilians: Civilian[], world: World) {
     this.mission = mission;

@@ -22,6 +22,9 @@ import { MISSIONS, type Mission } from "./mission/missions.ts";
 import { MissionController } from "./mission/runtime.ts";
 import { Editor } from "./editor/editor.ts";
 import { applyLevel, levelToMission, listLevels, type CustomLevel } from "./editor/level.ts";
+import { KAIJU, type KaijuDef } from "./kaiju/kaiju.ts";
+import { KaijuController } from "./kaiju/runtime.ts";
+import type { PlayController } from "./scene.ts";
 
 export type Scene = "menu" | "play" | "editor";
 
@@ -47,8 +50,8 @@ export class Game {
   protected readonly stage: HTMLElement;
   protected scene: Scene = "menu";
 
-  protected mission: MissionController | null = null;
-  private activeMission: Mission | null = null;
+  protected controller: PlayController | null = null;
+  private retry: (() => void) | null = null;
   private paused = false;
   protected readonly editor: Editor;
   private editorLevel: CustomLevel | null = null;
@@ -118,6 +121,15 @@ export class Game {
         })),
       },
       {
+        title: "Kaiju Fights",
+        items: KAIJU.map((k) => ({
+          label: k.name,
+          desc: k.blurb,
+          badge: k.badge,
+          onClick: () => this.startKaiju(k),
+        })),
+      },
+      {
         title: "Create",
         items: [
           { label: "New Level", desc: "Open the editor on a blank canvas.", badge: "EDITOR", onClick: () => this.openEditorNew() },
@@ -139,8 +151,8 @@ export class Game {
   protected toMenu(): void {
     this.scene = "menu";
     this.paused = false;
-    this.mission = null;
-    this.activeMission = null;
+    this.controller = null;
+    this.retry = null;
     this.missionHud.hide();
     this.editor.deactivate();
     this.buildMenu(); // refresh saved-level list
@@ -162,7 +174,8 @@ export class Game {
   }
 
   private enterEditor(): void {
-    this.mission = null;
+    this.controller = null;
+    this.retry = null;
     this.missionHud.hide();
     this.scene = "editor";
     this.paused = false;
@@ -184,28 +197,41 @@ export class Game {
   }
 
   startFreePlay(def: WorldDef): void {
-    this.mission = null;
-    this.activeMission = null;
+    this.controller = null;
+    this.retry = null;
     this.missionHud.hide();
     this.loadWorld(def);
     this.scene = "play";
     this.paused = false;
+    this.editor.deactivate();
     this.menu.hide();
     audio.resume();
   }
 
   startMission(m: Mission): void {
-    this.world.reset();
-    this.particles.reset();
-    this.collapse.reset();
-    this.effects.reset();
+    this.resetSystems();
     const civilians = m.generate(this.world, this.rng);
     this.hero.placeAt(m.spawn.x, m.spawn.y);
-    this.mission = new MissionController(m, civilians, this.world);
-    this.activeMission = m;
+    this.controller = new MissionController(m, civilians, this.world);
+    this.retry = () => this.startMission(m);
     this.missionHud.setMission(m.name);
+    this.enterPlay();
+  }
+
+  startKaiju(def: KaijuDef): void {
+    this.resetSystems();
+    const cores = def.build(this.world, this.rng);
+    this.hero.placeAt(def.heroSpawn.x, def.heroSpawn.y);
+    this.controller = new KaijuController(def, cores, this.world, this.particles, this.rng);
+    this.retry = () => this.startKaiju(def);
+    this.missionHud.setMission(def.name);
+    this.enterPlay();
+  }
+
+  private enterPlay(): void {
     this.scene = "play";
     this.paused = false;
+    this.editor.deactivate();
     this.menu.hide();
     audio.resume();
   }
@@ -237,33 +263,27 @@ export class Game {
     this.particles.update(this.world);
     this.effects.update();
     this.crushCheck();
-    this.updateMission();
+    this.updatePlay();
     this.onStepExtra();
   }
 
-  private updateMission(): void {
-    if (!this.mission) return;
-    this.mission.update(this.world, this.hero);
-    this.missionHud.update(
-      this.mission.mission.name,
-      this.mission.statuses(this.world),
-      this.mission.remaining,
-    );
-    if (this.mission.status !== "active") {
+  private updatePlay(): void {
+    const c = this.controller;
+    if (!c) return;
+    c.update(this.world, this.hero);
+    this.missionHud.update(c.name, c.statuses(this.world), c.remaining);
+    if (c.status !== "active") {
       this.paused = true;
-      const won = this.mission.status === "won";
-      const reason = this.mission.failReason;
-      const mission = this.activeMission!;
       this.missionHud.showEnd(
-        won,
-        reason,
-        () => this.startMission(mission),
+        c.status === "won",
+        c.failReason,
+        () => this.retry?.(),
         () => this.toMenu(),
       );
     }
   }
 
-  /** Hook for subclasses (kaiju) to add per-tick logic. */
+  /** Hook for subclasses to add per-tick logic. */
   protected onStepExtra(): void {}
 
   protected handleInput(): void {
@@ -324,7 +344,7 @@ export class Game {
       bodies: this.collapse.bodies,
       hero: this.scene === "play" && this.input.mode === "hero" ? this.hero : undefined,
       effects: this.effects,
-      markers: this.mission?.civilians,
+      markers: this.controller?.civilians,
     });
     const shake = sampleShake(0.06, 6);
     this.stage.style.transform = `translate(${shake.x.toFixed(2)}px, ${shake.y.toFixed(2)}px)`;

@@ -7,9 +7,21 @@ floods, freezes, burns and collapses according to real rules.
 Original name, art and code. No game engine — TypeScript + Vite, rendering to a
 single canvas.
 
-> **Status: Phase 4 complete** — the flying superhero and all nine elemental
-> powers, plus Phase 3's rigid-chunk structural collapse, on top of the
-> Phase 1–2 cellular simulation (temperature, materials, fire, explosions).
+> **Status: all 8 phases complete** — the full cellular sim (materials, heat,
+> fire, explosions), rigid-chunk collapse, the flying hero and nine powers, four
+> procedural worlds, menus and synthesized sound, a 6-mission campaign, an
+> in-game level editor with save/share, and kaiju boss fights.
+
+## Game modes (from the main menu, Esc returns there)
+
+- **Free Play** — pick a procedural world (Volcano Island, Frozen City, Canyon
+  Dam, Metal Foundry) and wreck it.
+- **Missions** — six data-driven objectives: Cool the Flow, Fill the Cistern,
+  Still the Surge, Bring It Down, Evacuation, Hold the Line.
+- **Kaiju Fights** — Cragmaw (rock golem, shatter the cores), Sinuvex (ice
+  serpent, melt it), Pyrogon (magma beast, cool then shatter).
+- **Create** — the level editor: paint a world, place a spawn / civilians /
+  goal + protect zones, Test-play, Save, and Export/Import a shareable string.
 
 ---
 
@@ -92,10 +104,14 @@ src/
 │   ├── particles.ts         # debris pool (SoA) that re-enters the grid
 │   ├── explosion.ts         # radial shatter + heat + debris
 │   ├── collapse.ts          # connectivity flood-fill -> falling rigid bodies
-│   └── worldgen.ts          # starter scene
+│   └── worldgen.ts          # four procedural free-play worlds (registry)
 ├── entity/
-│   ├── hero.ts              # flying hero: movement, AABB collision, health
+│   ├── hero.ts              # flying hero: movement, carving, health
 │   └── powers.ts            # the 9 elemental powers (data-driven table)
+├── mission/                 # data-driven objectives, 6 missions, runtime
+├── kaiju/                   # kaiju defs (3) + fight controller
+├── editor/                  # level format (RLE + base64) + in-game editor
+├── game.ts                  # scene controller (menu/play/editor) over the loop
 ├── render/
 │   └── renderer.ts          # framebuffer -> canvas; draws cells, bodies, hero, FX
 ├── core/
@@ -236,7 +252,7 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
    explosions + debris particles.
 3. **Phase 3 (done)** — rigid-chunk structural collapse.
 4. **Phase 4 (done)** — superhero movement and all nine elemental powers.
-5. Phase 5 — procedural worlds, HUD, menus, synthesized audio.
-6. Phase 6 — data-driven mission system + first 6 missions.
-7. Phase 7 — level editor with save / load / share.
-8. Phase 8 — kaiju fights.
+5. **Phase 5 (done)** — procedural worlds, menus, synthesized Web Audio.
+6. **Phase 6 (done)** — data-driven mission system + 6 missions.
+7. **Phase 7 (done)** — level editor with save / load / share.
+8. **Phase 8 (done)** — kaiju fights (one, generalized to three).
