@@ -1,0 +1,209 @@
+import { SCALE } from "./sim/constants.ts";
+import { World } from "./sim/world.ts";
+import { step } from "./sim/simulation.ts";
+import { WORLDS, type WorldDef } from "./sim/worldgen.ts";
+import { ID } from "./sim/materials.ts";
+import { Particles } from "./sim/particles.ts";
+import { explode } from "./sim/explosion.ts";
+import { CollapseSystem } from "./sim/collapse.ts";
+import { Renderer } from "./render/renderer.ts";
+import { Loop } from "./core/loop.ts";
+import { Input } from "./core/input.ts";
+import { Rng } from "./core/rng.ts";
+import { sampleShake } from "./core/fx.ts";
+import { Effects } from "./core/effects.ts";
+import { audio } from "./core/audio.ts";
+import { Hero } from "./entity/hero.ts";
+import { POWERS } from "./entity/powers.ts";
+import { Hud } from "./ui/hud.ts";
+import { Menu, type MenuSection } from "./ui/menu.ts";
+
+export type Scene = "menu" | "play";
+
+/**
+ * Top-level game controller. Owns the world, all systems, the hero, the render
+ * loop and scene state (menu vs play), and swaps worlds in place without
+ * rebuilding subsystems. Later phases extend this with missions, the editor and
+ * kaiju by adding scene modes and menu sections.
+ */
+export class Game {
+  readonly world: World;
+  readonly particles: Particles;
+  readonly collapse: CollapseSystem;
+  readonly effects: Effects;
+  readonly hero: Hero;
+  readonly rng: Rng;
+
+  protected readonly renderer: Renderer;
+  protected readonly input: Input;
+  protected readonly hud: Hud;
+  protected readonly menu: Menu;
+  protected readonly stage: HTMLElement;
+  protected scene: Scene = "menu";
+
+  constructor() {
+    const canvas = document.getElementById("screen") as HTMLCanvasElement;
+    this.stage = document.getElementById("stage") as HTMLElement;
+
+    this.world = new World();
+    this.particles = new Particles();
+    this.collapse = new CollapseSystem(this.world);
+    this.effects = new Effects();
+    this.rng = new Rng(0xc0ffee);
+    this.hero = new Hero(this.world, this.particles, this.collapse, this.rng, 90, 60);
+    this.collapse.onImpact = () => audio.thud();
+
+    this.renderer = new Renderer(canvas, this.world, SCALE);
+    this.hud = new Hud(this.world, (i) => this.input.select(i));
+    this.input = new Input(
+      canvas,
+      (i) => this.hud.setSelected(i),
+      (wx, wy) => this.detonate(wx, wy),
+      (mode) => {
+        this.hud.setMode(mode);
+        this.hud.setSelected(this.input.selectedIndex);
+      },
+      () => this.toMenu(),
+    );
+    this.hud.setSelected(0);
+    this.menu = new Menu();
+
+    this.buildMenu();
+    this.toMenu();
+
+    this.loop = new Loop(
+      () => this.step(),
+      () => this.render(),
+    );
+    this.loop.start();
+  }
+
+  // --- menu / scene ------------------------------------------------------
+
+  protected buildMenu(): void {
+    const sections: MenuSection[] = [
+      {
+        title: "Free Play",
+        items: WORLDS.map((wd) => ({
+          label: wd.name,
+          desc: wd.blurb,
+          onClick: () => this.startFreePlay(wd),
+        })),
+      },
+    ];
+    this.menu.render(sections);
+  }
+
+  protected toMenu(): void {
+    this.scene = "menu";
+    this.menu.show();
+  }
+
+  startFreePlay(def: WorldDef): void {
+    this.loadWorld(def);
+    this.scene = "play";
+    this.menu.hide();
+    audio.resume();
+  }
+
+  /** Reset every system and generate a fresh world in place. */
+  protected loadWorld(def: WorldDef): void {
+    this.world.reset();
+    this.particles.reset();
+    this.collapse.reset();
+    this.effects.reset();
+    def.generate(this.world, this.rng);
+    this.hero.placeAt(def.spawn.x, def.spawn.y);
+  }
+
+  protected detonate(wx: number, wy: number): void {
+    if (this.scene !== "play") return;
+    explode(this.world, this.particles, wx, wy, 18, 110, this.rng);
+    this.collapse.markRegion(wx - 20, wy - 20, wx + 20, wy + 20);
+    audio.boom();
+  }
+
+  // --- loop --------------------------------------------------------------
+
+  protected step(): void {
+    if (this.scene !== "play") return;
+    this.handleInput();
+    step(this.world, this.rng);
+    this.collapse.update(this.particles, this.rng);
+    this.particles.update(this.world);
+    this.effects.update();
+    this.crushCheck();
+    this.onStepExtra();
+  }
+
+  /** Hook for subclasses (missions/kaiju) to add per-tick logic. */
+  protected onStepExtra(): void {}
+
+  protected handleInput(): void {
+    const input = this.input;
+    if (input.mode === "paint") {
+      if (input.painting) {
+        this.world.paintCircle(input.wx, input.wy, input.brush, input.materialId);
+      } else if (input.erasing) {
+        this.world.paintCircle(input.wx, input.wy, input.brush, ID.AIR);
+        this.collapse.markRegion(
+          input.wx - input.brush - 1,
+          input.wy - input.brush - 1,
+          input.wx + input.brush + 1,
+          input.wy + input.brush + 1,
+        );
+      }
+    } else {
+      this.hero.update(input.moveX(), input.moveY(), input.wx);
+      if (input.firePrimary) {
+        POWERS[input.powerIndex].fire({
+          world: this.world,
+          particles: this.particles,
+          collapse: this.collapse,
+          effects: this.effects,
+          rng: this.rng,
+          hero: this.hero,
+          aimX: input.wx,
+          aimY: input.wy,
+        });
+      }
+    }
+  }
+
+  private crushCheck(): void {
+    const h = this.hero;
+    const left = h.cx - h.hw;
+    const right = h.cx + h.hw;
+    const top = h.cy - h.hh;
+    const bottom = h.cy + h.hh;
+    for (const body of this.collapse.bodies) {
+      if (body.ox > right || body.ox + body.bw < left || body.oy > bottom || body.oy + body.bh < top) {
+        continue;
+      }
+      h.hurt(0.9);
+      break;
+    }
+  }
+
+  protected render(): void {
+    this.renderer.render({
+      particles: this.particles,
+      bodies: this.collapse.bodies,
+      hero: this.scene === "play" && this.input.mode === "hero" ? this.hero : undefined,
+      effects: this.effects,
+    });
+    const shake = sampleShake(0.06, 6);
+    this.stage.style.transform = `translate(${shake.x.toFixed(2)}px, ${shake.y.toFixed(2)}px)`;
+    this.hud.update(this.loop.stats, {
+      brush: this.input.brush,
+      particles: this.particles.count,
+      bodies: this.collapse.bodies.length,
+      health: this.hero.health,
+    });
+    this.onRenderExtra();
+  }
+
+  protected onRenderExtra(): void {}
+
+  protected loop!: Loop;
+}

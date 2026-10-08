@@ -21,6 +21,12 @@ export class Particles {
 
   private cursor = 0;
 
+  reset(): void {
+    this.alive.fill(0);
+    this.count = 0;
+    this.cursor = 0;
+  }
+
   spawn(
     x: number,
     y: number,

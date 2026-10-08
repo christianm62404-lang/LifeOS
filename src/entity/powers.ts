@@ -6,6 +6,7 @@ import { ID, State, material } from "../sim/materials.ts";
 import { Rng } from "../core/rng.ts";
 import { Effects } from "../core/effects.ts";
 import { addShake } from "../core/fx.ts";
+import { audio } from "../core/audio.ts";
 import { Hero } from "./hero.ts";
 
 export interface PowerCtx {
@@ -78,6 +79,7 @@ const HEAT_BEAM: Power = {
       return !(material(m).state === State.Solid && material(m).strength > 40);
     });
     ctx.effects.line(mx, my, end.x, end.y, HEAT_BEAM.color, 2);
+    audio.hiss();
   },
 };
 
@@ -100,6 +102,7 @@ const FREEZE_BREATH: Power = {
       return material(ctx.world.mat[ctx.world.idx(x, y)]).state !== State.Solid;
     });
     ctx.effects.line(mx, my, end.x, end.y, FREEZE_BREATH.color, 2);
+    audio.freeze();
   },
 };
 
@@ -112,6 +115,7 @@ const WATER_JET: Power = {
       const spread = (ctx.rng.next() - 0.5) * 0.3;
       ctx.particles.spawn(mx, my, (dx + spread) * 4.5, (dy + spread) * 4.5, ID.WATER, 20, 60);
     }
+    audio.whoosh();
   },
 };
 
@@ -121,6 +125,7 @@ const LAVA_ERUPTION: Power = {
   fire(ctx) {
     ctx.world.paintCircle(ctx.aimX, ctx.aimY, 6, ID.LAVA);
     addShake(0.25);
+    audio.boom(0.6);
   },
 };
 
@@ -138,6 +143,7 @@ const EARTH_RAISE: Power = {
     }
     ctx.collapse.markRegion(ctx.aimX - half - 1, ctx.aimY - 14, ctx.aimX + half + 1, ctx.aimY + 14);
     addShake(0.2);
+    audio.rumble();
   },
 };
 
@@ -170,6 +176,7 @@ const QUAKE: Power = {
       }
     }
     addShake(0.9);
+    audio.rumble();
   },
 };
 
@@ -194,6 +201,7 @@ const LIGHTNING: Power = {
     }
     conduct(ctx, hit.x, hit.y);
     addShake(0.3);
+    audio.zap();
   },
 };
 
@@ -272,6 +280,7 @@ const WIND_GUST: Power = {
         }
       }
     }
+    audio.whoosh();
   },
 };
 
@@ -289,6 +298,7 @@ const GROUND_SLAM: Power = {
     }
     explode(ctx.world, ctx.particles, bx, by, 14, 85, ctx.rng, 0.05); // kinetic (no fire)
     ctx.collapse.markRegion(bx - 16, by - 16, bx + 16, by + 16);
+    audio.boom(0.8);
   },
 };
 

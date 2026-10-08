@@ -48,4 +48,8 @@ export class Effects {
       if (--this.segments[i].ttl <= 0) this.segments.splice(i, 1);
     }
   }
+
+  reset(): void {
+    this.segments.length = 0;
+  }
 }

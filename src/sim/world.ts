@@ -128,6 +128,20 @@ export class World {
     this.chunkNext.fill(1);
   }
 
+  /** Reset every cell to empty air (used when loading a new world). */
+  reset(): void {
+    this.mat.fill(0);
+    this.shade.fill(0);
+    this.temp.fill(AMBIENT_TEMP);
+    this.flags.fill(0);
+    this.aux.fill(0);
+    this.movedTick.fill(0);
+    this.chunkActive.fill(0);
+    this.chunkNext.fill(0);
+    this.frame = 0;
+    this.activeChunks = 0;
+  }
+
   // --- cell mutation -----------------------------------------------------
 
   /** True if the cell has already moved this tick. */

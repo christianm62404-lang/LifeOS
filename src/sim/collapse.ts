@@ -49,6 +49,8 @@ interface Region {
  */
 export class CollapseSystem {
   readonly bodies: RigidBody[] = [];
+  /** Optional hook fired on a hard landing (for sound). */
+  onImpact: (() => void) | null = null;
   private regions: Region[] = [];
 
   // Visited stamp for flood-fill (avoids clearing a big array each pass).
@@ -59,6 +61,14 @@ export class CollapseSystem {
   constructor(private readonly world: World) {
     this.mark = new Int32Array(world.w * world.h);
     this.stack = new Int32Array(MAX_COMPONENT + 4);
+  }
+
+  reset(): void {
+    this.bodies.length = 0;
+    this.regions.length = 0;
+    this.mark.fill(0);
+    this.pass = 0;
+    this.tick = 0;
   }
 
   /** Queue a region (grows a little to catch neighbours of the damage). */
@@ -321,7 +331,10 @@ export class CollapseSystem {
     }
     // The impact may have undermined neighbours — re-check around it.
     this.markRegion(body.ox - 1, body.oy - 1, body.ox + body.bw, body.oy + body.bh + 1);
-    if (hard) addShake(Math.min(0.6, body.n / 400 + 0.1));
+    if (hard) {
+      addShake(Math.min(0.6, body.n / 400 + 0.1));
+      this.onImpact?.();
+    }
   }
 }
 

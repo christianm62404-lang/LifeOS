@@ -1,6 +1,7 @@
 import { SCALE } from "../sim/constants.ts";
 import { PALETTE } from "../sim/materials.ts";
 import { POWERS } from "../entity/powers.ts";
+import { audio } from "./audio.ts";
 
 export type Mode = "hero" | "paint";
 
@@ -32,6 +33,7 @@ export class Input {
     private readonly onSelect: (index: number, mode: Mode) => void,
     private readonly onExplode: (wx: number, wy: number) => void,
     private readonly onModeChange: (mode: Mode) => void,
+    private readonly onMenu: () => void = () => {},
   ) {
     canvas.addEventListener("pointerdown", this.onPointerDown);
     window.addEventListener("pointerup", this.onPointerUp);
@@ -76,6 +78,7 @@ export class Input {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
+    audio.resume();
     this.updatePos(e);
     if (e.button === 1) {
       e.preventDefault();
@@ -107,7 +110,16 @@ export class Input {
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    audio.resume();
     const k = e.key.toLowerCase();
+    if (k === "escape") {
+      this.onMenu();
+      return;
+    }
+    if (k === "m") {
+      audio.toggle();
+      return;
+    }
     if (k === "tab") {
       e.preventDefault();
       this.mode = this.mode === "hero" ? "paint" : "hero";

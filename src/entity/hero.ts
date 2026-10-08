@@ -162,6 +162,13 @@ export class Hero {
     this.health = MAX_HEALTH;
     this.safeTicks = 0;
   }
+
+  /** Reposition the hero (new spawn point) and fully restore it. */
+  placeAt(x: number, y: number): void {
+    this.spawnX = x;
+    this.spawnY = y;
+    this.respawn();
+  }
 }
 
 function clamp(v: number, lo: number, hi: number): number {
