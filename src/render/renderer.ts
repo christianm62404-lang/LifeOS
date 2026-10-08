@@ -5,11 +5,19 @@ import type { RigidBody } from "../sim/collapse.ts";
 import type { Effects } from "../core/effects.ts";
 import { Hero, HERO_H, HERO_W } from "../entity/hero.ts";
 
+export interface Marker {
+  x: number;
+  y: number;
+  rescued: boolean;
+  lost: boolean;
+}
+
 export interface Scene {
   particles?: Particles;
   bodies?: readonly RigidBody[];
   hero?: Hero;
   effects?: Effects;
+  markers?: readonly Marker[];
 }
 
 // Original 8x12 hero sprite ("Emberkin"), 2 animation frames. '.'/' ' = clear.
@@ -134,6 +142,7 @@ export class Renderer {
 
     if (scene.bodies) this.drawBodies(scene.bodies);
     if (scene.particles) this.drawParticles(scene.particles);
+    if (scene.markers) this.drawMarkers(scene.markers);
     if (scene.hero) this.drawHero(scene.hero);
     if (scene.effects) this.drawEffects(scene.effects);
 
@@ -197,6 +206,30 @@ export class Renderer {
       this.setPixel(left + 4, top - 2, 255, 60, 60);
     }
   }
+
+  private drawMarkers(markers: readonly Marker[]): void {
+    // A small 3x5 civilian sprite: green = waiting, dim = rescued, red = lost.
+    for (const m of markers) {
+      if (m.rescued) continue;
+      const [r, g, b] = m.lost ? [120, 40, 40] : [120, 230, 140];
+      const bx = Math.round(m.x) - 1;
+      const by = Math.round(m.y) - 2;
+      this.setPixel(bx + 1, by, r, g, b); // head
+      this.setPixel(bx, by + 1, r, g, b);
+      this.setPixel(bx + 1, by + 1, r, g, b);
+      this.setPixel(bx + 2, by + 1, r, g, b);
+      this.setPixel(bx + 1, by + 2, r, g, b);
+      this.setPixel(bx, by + 3, r, g, b);
+      this.setPixel(bx + 2, by + 3, r, g, b);
+      // Pulsing halo so they're easy to spot.
+      if (!m.lost && ((this.pulse >> 3) & 1) === 0) {
+        this.setPixel(bx + 1, by - 2, 220, 255, 220);
+      }
+    }
+    this.pulse++;
+  }
+
+  private pulse = 0;
 
   private drawEffects(effects: Effects): void {
     for (const s of effects.segments) {

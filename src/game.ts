@@ -17,6 +17,9 @@ import { Hero } from "./entity/hero.ts";
 import { POWERS } from "./entity/powers.ts";
 import { Hud } from "./ui/hud.ts";
 import { Menu, type MenuSection } from "./ui/menu.ts";
+import { MissionHud } from "./ui/mission-hud.ts";
+import { MISSIONS, type Mission } from "./mission/missions.ts";
+import { MissionController } from "./mission/runtime.ts";
 
 export type Scene = "menu" | "play";
 
@@ -38,8 +41,13 @@ export class Game {
   protected readonly input: Input;
   protected readonly hud: Hud;
   protected readonly menu: Menu;
+  protected readonly missionHud: MissionHud;
   protected readonly stage: HTMLElement;
   protected scene: Scene = "menu";
+
+  protected mission: MissionController | null = null;
+  private activeMission: Mission | null = null;
+  private paused = false;
 
   constructor() {
     const canvas = document.getElementById("screen") as HTMLCanvasElement;
@@ -67,6 +75,7 @@ export class Game {
     );
     this.hud.setSelected(0);
     this.menu = new Menu();
+    this.missionHud = new MissionHud();
 
     this.buildMenu();
     this.toMenu();
@@ -90,18 +99,51 @@ export class Game {
           onClick: () => this.startFreePlay(wd),
         })),
       },
+      {
+        title: "Missions",
+        items: MISSIONS.map((m) => ({
+          label: m.name,
+          desc: m.blurb,
+          badge: m.badge,
+          onClick: () => this.startMission(m),
+        })),
+      },
     ];
     this.menu.render(sections);
   }
 
   protected toMenu(): void {
     this.scene = "menu";
+    this.paused = false;
+    this.mission = null;
+    this.activeMission = null;
+    this.missionHud.hide();
     this.menu.show();
   }
 
   startFreePlay(def: WorldDef): void {
+    this.mission = null;
+    this.activeMission = null;
+    this.missionHud.hide();
     this.loadWorld(def);
     this.scene = "play";
+    this.paused = false;
+    this.menu.hide();
+    audio.resume();
+  }
+
+  startMission(m: Mission): void {
+    this.world.reset();
+    this.particles.reset();
+    this.collapse.reset();
+    this.effects.reset();
+    const civilians = m.generate(this.world, this.rng);
+    this.hero.placeAt(m.spawn.x, m.spawn.y);
+    this.mission = new MissionController(m, civilians, this.world);
+    this.activeMission = m;
+    this.missionHud.setMission(m.name);
+    this.scene = "play";
+    this.paused = false;
     this.menu.hide();
     audio.resume();
   }
@@ -126,17 +168,40 @@ export class Game {
   // --- loop --------------------------------------------------------------
 
   protected step(): void {
-    if (this.scene !== "play") return;
+    if (this.scene !== "play" || this.paused) return;
     this.handleInput();
     step(this.world, this.rng);
     this.collapse.update(this.particles, this.rng);
     this.particles.update(this.world);
     this.effects.update();
     this.crushCheck();
+    this.updateMission();
     this.onStepExtra();
   }
 
-  /** Hook for subclasses (missions/kaiju) to add per-tick logic. */
+  private updateMission(): void {
+    if (!this.mission) return;
+    this.mission.update(this.world, this.hero);
+    this.missionHud.update(
+      this.mission.mission.name,
+      this.mission.statuses(this.world),
+      this.mission.remaining,
+    );
+    if (this.mission.status !== "active") {
+      this.paused = true;
+      const won = this.mission.status === "won";
+      const reason = this.mission.failReason;
+      const mission = this.activeMission!;
+      this.missionHud.showEnd(
+        won,
+        reason,
+        () => this.startMission(mission),
+        () => this.toMenu(),
+      );
+    }
+  }
+
+  /** Hook for subclasses (kaiju) to add per-tick logic. */
   protected onStepExtra(): void {}
 
   protected handleInput(): void {
@@ -191,6 +256,7 @@ export class Game {
       bodies: this.collapse.bodies,
       hero: this.scene === "play" && this.input.mode === "hero" ? this.hero : undefined,
       effects: this.effects,
+      markers: this.mission?.civilians,
     });
     const shake = sampleShake(0.06, 6);
     this.stage.style.transform = `translate(${shake.x.toFixed(2)}px, ${shake.y.toFixed(2)}px)`;
