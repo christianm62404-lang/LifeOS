@@ -273,6 +273,15 @@ export function material(id: number): Material {
   return MATERIALS[id] ?? MATERIALS[ID.AIR];
 }
 
+/**
+ * Does this material stop a *falling solid* (rigid chunk or debris)? Only solids
+ * and powders do — falling stone sinks through liquids and gases.
+ */
+export function blocksFalling(id: number): boolean {
+  const st = MATERIALS[id]?.state;
+  return st === State.Solid || st === State.Powder;
+}
+
 // --- contact reactions ---------------------------------------------------
 
 export interface Reaction {

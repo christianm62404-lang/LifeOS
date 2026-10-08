@@ -12,20 +12,37 @@ export interface Scene {
   effects?: Effects;
 }
 
-// Original 8x12 hero sprite ("Emberkin"). '.'/' ' = transparent.
-const HERO_SPRITE = [
-  "   SS   ",
-  "  SSSS  ",
-  "  SKKS  ",
-  "   KK   ",
-  " CSSSSC ",
-  " CSSSSC ",
-  " CSSSSC ",
-  "  SSSS  ",
-  "  S  S  ",
-  "  B  B  ",
-  "  B  B  ",
-  " BB  BB ",
+// Original 8x12 hero sprite ("Emberkin"), 2 animation frames. '.'/' ' = clear.
+// Frame 0: cape down / legs together. Frame 1: cape flared / legs apart.
+const HERO_FRAMES = [
+  [
+    "   SS   ",
+    "  SSSS  ",
+    "  SKKS  ",
+    "   KK   ",
+    " CSSSSC ",
+    " CSSSSC ",
+    " CSSSSC ",
+    "  SSSS  ",
+    "  S  S  ",
+    "  B  B  ",
+    "  B  B  ",
+    "  BB BB ",
+  ],
+  [
+    "   SS   ",
+    "  SSSS  ",
+    "  SKKS  ",
+    "   KK   ",
+    "CCSSSSC ",
+    "CCSSSSC ",
+    " CSSSSC ",
+    "  SSSS  ",
+    " S    S ",
+    " B    B ",
+    " B    B ",
+    "BB    BB",
+  ],
 ];
 const HERO_COLORS: Record<string, [number, number, number]> = {
   S: [84, 96, 214], // suit (indigo)
@@ -145,19 +162,37 @@ export class Renderer {
   }
 
   private drawHero(hero: Hero): void {
+    // Animation: flutter fast while moving, gentle idle sway otherwise, plus a
+    // 1px vertical bob so the hover reads as alive.
+    const frameIdx = hero.moving
+      ? (hero.animTime >> 2) & 1
+      : (hero.animTime >> 4) & 1;
+    const bob = hero.moving ? 0 : (hero.animTime >> 5) & 1;
+    const sprite = HERO_FRAMES[frameIdx];
+
     const left = Math.round(hero.cx - HERO_W / 2);
-    const top = Math.round(hero.cy - HERO_H / 2);
+    const top = Math.round(hero.cy - HERO_H / 2) + bob;
     const flip = hero.facing < 0;
-    for (let row = 0; row < HERO_SPRITE.length; row++) {
-      const line = HERO_SPRITE[row];
+
+    // Thruster flames trailing opposite the velocity when moving.
+    if (hero.moving) {
+      const tx = Math.round(hero.cx - hero.vx * 2);
+      const ty = Math.round(hero.cy - hero.vy * 2);
+      this.setPixel(tx, ty, 255, 170, 60);
+      this.setPixel(tx, ty + 1, 255, 120, 40);
+    }
+
+    for (let row = 0; row < sprite.length; row++) {
+      const line = sprite[row];
       for (let col = 0; col < HERO_W; col++) {
         const ch = line[flip ? HERO_W - 1 - col : col];
         const color = ch && HERO_COLORS[ch];
         if (color) this.setPixel(left + col, top + row, color[0], color[1], color[2]);
       }
     }
-    // Low-health tint overlay.
-    if (hero.health < 35) {
+
+    // Low-health flashing tint above the head.
+    if (hero.health < 35 && ((hero.animTime >> 3) & 1) === 0) {
       this.setPixel(left + 3, top - 2, 255, 60, 60);
       this.setPixel(left + 4, top - 2, 255, 60, 60);
     }

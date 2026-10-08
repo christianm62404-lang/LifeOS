@@ -13,7 +13,7 @@ import { Rng } from "./core/rng.ts";
 import { sampleShake } from "./core/fx.ts";
 import { Effects } from "./core/effects.ts";
 import { Hero } from "./entity/hero.ts";
-import { POWERS, type PowerCtx } from "./entity/powers.ts";
+import { POWERS } from "./entity/powers.ts";
 import { Hud } from "./ui/hud.ts";
 
 /** Entry point: wires sim + collapse + entities + render + input + HUD. */
@@ -30,7 +30,7 @@ function main(): void {
   const renderer = new Renderer(canvas, world, SCALE);
   const simRng = new Rng(0xc0ffee);
 
-  const hero = new Hero(world, WORLD_W * 0.3, WORLD_H * 0.3);
+  const hero = new Hero(world, particles, collapse, simRng, WORLD_W * 0.3, WORLD_H * 0.3);
 
   const hud = new Hud(world, (i) => input.select(i));
   const input = new Input(
@@ -47,13 +47,10 @@ function main(): void {
   );
   hud.setSelected(0);
 
-  let cooldown = 0;
-
   const firePower = (): void => {
-    if (cooldown > 0) cooldown--;
-    const power = POWERS[input.powerIndex];
     if (!input.firePrimary) return;
-    const ctx: PowerCtx = {
+    // No cooldowns — powers are unlimited.
+    POWERS[input.powerIndex].fire({
       world,
       particles,
       collapse,
@@ -62,13 +59,7 @@ function main(): void {
       hero,
       aimX: input.wx,
       aimY: input.wy,
-    };
-    if (power.mode === "hold") {
-      power.fire(ctx);
-    } else if (cooldown <= 0) {
-      power.fire(ctx);
-      cooldown = power.cooldown;
-    }
+    });
   };
 
   const crushCheck = (): void => {

@@ -1,18 +1,21 @@
 import { World } from "../sim/world.ts";
-import { ID, State, material } from "../sim/materials.ts";
+import { Particles } from "../sim/particles.ts";
+import { CollapseSystem } from "../sim/collapse.ts";
+import { ID, blocksFalling } from "../sim/materials.ts";
+import { Rng } from "../core/rng.ts";
 
 /**
- * The player: a small flying superhero ("Emberkin") with momentum-based flight,
- * AABB collision against solid cells, and health affected by heat, drowning and
- * crushing. The hero acts on the world only through powers (see powers.ts); this
- * class owns movement, collision and survival.
+ * The player: a small flying superhero ("Emberkin"). He flies with momentum and
+ * *plows through* the world — solids he passes through shatter into debris and
+ * the surrounding structure is flagged for collapse, so he tunnels destruction
+ * as he moves. Health is drained by heat, lava/fire, drowning and crushing.
  */
 export const HERO_W = 8;
 export const HERO_H = 12;
 
-const ACCEL = 0.45;
-const DAMP = 0.88;
-const MAX_SPEED = 3.6;
+const ACCEL = 0.5;
+const DAMP = 0.9;
+const MAX_SPEED = 4.2;
 const MAX_HEALTH = 100;
 
 export class Hero {
@@ -22,12 +25,18 @@ export class Hero {
   vy = 0;
   health = MAX_HEALTH;
   facing = 1; // +1 right, -1 left
+  animTime = 0;
+  moving = false;
+
   private spawnX: number;
   private spawnY: number;
   private safeTicks = 0;
 
   constructor(
     private readonly world: World,
+    private readonly particles: Particles,
+    private readonly collapse: CollapseSystem,
+    private readonly rng: Rng,
     x: number,
     y: number,
   ) {
@@ -46,55 +55,55 @@ export class Hero {
 
   /** Apply movement input (unit-ish vector) and advance physics one tick. */
   update(moveX: number, moveY: number, aimX: number): void {
+    this.animTime++;
     this.vx = (this.vx + moveX * ACCEL) * DAMP;
     this.vy = (this.vy + moveY * ACCEL) * DAMP;
     this.vx = clamp(this.vx, -MAX_SPEED, MAX_SPEED);
     this.vy = clamp(this.vy, -MAX_SPEED, MAX_SPEED);
+    this.moving = Math.hypot(this.vx, this.vy) > 0.35;
     if (aimX < this.cx - 1) this.facing = -1;
     else if (aimX > this.cx + 1) this.facing = 1;
 
-    this.moveAxis(this.vx, 0);
-    this.moveAxis(0, this.vy);
+    // Fly freely; clamp only to the world bounds.
+    this.cx = clamp(this.cx + this.vx, this.hw, this.world.w - this.hw);
+    this.cy = clamp(this.cy + this.vy, this.hh, this.world.h - this.hh);
 
+    this.carve();
     this.applyEnvironment();
   }
 
-  /** Move along one axis in 1px steps, stopping against solids. */
-  private moveAxis(dx: number, dy: number): void {
-    const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)));
-    if (steps === 0) return;
-    const sx = dx / steps;
-    const sy = dy / steps;
-    for (let s = 0; s < steps; s++) {
-      const nx = this.cx + sx;
-      const ny = this.cy + sy;
-      if (this.collides(nx, ny)) {
-        if (dx !== 0) this.vx = 0;
-        if (dy !== 0) this.vy = 0;
-        return;
-      }
-      this.cx = nx;
-      this.cy = ny;
-    }
-  }
-
-  /** True if the hero's AABB at (cx,cy) overlaps any solid cell. */
-  private collides(cx: number, cy: number): boolean {
+  /** Shatter solids/powders the hero overlaps and flag the area to collapse. */
+  private carve(): void {
     const { world } = this;
-    const left = Math.floor(cx - this.hw);
-    const right = Math.ceil(cx + this.hw) - 1;
-    const top = Math.floor(cy - this.hh);
-    const bottom = Math.ceil(cy + this.hh) - 1;
+    const left = Math.max(0, Math.floor(this.cx - this.hw));
+    const right = Math.min(world.w - 1, Math.ceil(this.cx + this.hw) - 1);
+    const top = Math.max(0, Math.floor(this.cy - this.hh));
+    const bottom = Math.min(world.h - 1, Math.ceil(this.cy + this.hh) - 1);
+
+    let carved = false;
     for (let y = top; y <= bottom; y++) {
       for (let x = left; x <= right; x++) {
-        if (x < 0 || y < 0 || x >= world.w || y >= world.h) {
-          if (x < 0 || x >= world.w || y >= world.h) return true; // walls/floor
-          continue;
+        const i = world.idx(x, y);
+        const m = world.mat[i];
+        if (!blocksFalling(m)) continue;
+        carved = true;
+        if (this.rng.next() < 0.3) {
+          this.particles.spawn(
+            x + 0.5,
+            y + 0.5,
+            this.vx * 0.5 + (this.rng.next() - 0.5) * 1.5,
+            this.vy * 0.5 - this.rng.next() * 1.2,
+            m,
+            world.temp[i],
+            24 + this.rng.int(24),
+          );
         }
-        if (material(world.mat[world.idx(x, y)]).state === State.Solid) return true;
+        world.convert(i, ID.AIR);
       }
     }
-    return false;
+    if (carved) {
+      this.collapse.markRegion(left - 2, top - 2, right + 2, bottom + 2);
+    }
   }
 
   /** Sample surroundings for heat / drowning damage, and regenerate if safe. */
@@ -122,7 +131,7 @@ export class Hero {
 
     let damage = 0;
     if (lavaOrFire > 0) damage += 1.2 + lavaOrFire * 0.15; // burning
-    else if (maxTemp > 90) damage += (maxTemp - 90) * 0.01; // ambient heat
+    else if (maxTemp > 110) damage += (maxTemp - 110) * 0.008; // ambient heat
     if (water > cells * 0.6) damage += 0.35; // drowning
 
     if (damage > 0) {

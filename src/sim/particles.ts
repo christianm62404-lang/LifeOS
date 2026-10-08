@@ -1,5 +1,5 @@
 import { World } from "./world.ts";
-import { ID, State, material } from "./materials.ts";
+import { blocksFalling } from "./materials.ts";
 import { MAX_PARTICLES, PARTICLE_GRAVITY } from "./constants.ts";
 
 /**
@@ -81,10 +81,8 @@ export class Particles {
         }
 
         const cell = world.mat[world.idx(cx, cy)];
-        // Blocked by anything that isn't air or a thin gas it can push through.
-        const blocked =
-          cell !== ID.AIR && material(cell).state !== State.Gas;
-        if (blocked) {
+        // Debris sinks through air, gas and liquid; only solids/powders stop it.
+        if (blocksFalling(cell)) {
           this.deposit(world, Math.floor(px), Math.floor(py), i);
           settled = true;
           break;
@@ -110,7 +108,8 @@ export class Particles {
     this.alive[i] = 0;
     if (cx < 0 || cy < 0 || cx >= world.w || cy >= world.h) return;
     const idx = world.idx(cx, cy);
-    if (world.mat[idx] === ID.AIR || material(world.mat[idx]).state === State.Gas) {
+    // Settle into any non-blocking cell (air, gas, or liquid it sank through).
+    if (!blocksFalling(world.mat[idx])) {
       world.convert(idx, this.mat[i], this.temp[i]);
     }
   }

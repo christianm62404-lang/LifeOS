@@ -1,6 +1,6 @@
 import { World } from "./world.ts";
 import { Particles } from "./particles.ts";
-import { ID, State, material } from "./materials.ts";
+import { ID, State, blocksFalling, material } from "./materials.ts";
 import { Rng } from "../core/rng.ts";
 import { addShake } from "../core/fx.ts";
 import {
@@ -72,8 +72,14 @@ export class CollapseSystem {
     });
   }
 
+  private tick = 0;
+
   update(particles: Particles, rng: Rng): void {
-    this.detectDetachments();
+    // Detection is relatively heavy (flood-fill); run it every other tick.
+    // Bodies still fall every tick so motion stays smooth.
+    if ((this.tick++ & 1) === 0 || this.regions.length > 16) {
+      this.detectDetachments();
+    }
     this.updateBodies(particles, rng);
   }
 
@@ -239,7 +245,10 @@ export class CollapseSystem {
     }
   }
 
-  /** Can the body occupy origin (ox,oy) without overlapping non-gas cells? */
+  /**
+   * Can the body occupy origin (ox,oy)? Blocked only by walls/floor and by
+   * other solids/powders — the chunk sinks through liquids and gases.
+   */
   private canPlace(body: RigidBody, ox: number, oy: number): boolean {
     const { world } = this;
     const { w, h, mat } = world;
@@ -248,13 +257,37 @@ export class CollapseSystem {
       const gy = oy + body.dy[k];
       if (gx < 0 || gx >= w || gy >= h) return false; // walls / floor
       if (gy < 0) continue; // above the top is fine
-      const cell = mat[gy * w + gx];
-      if (cell !== ID.AIR && material(cell).state !== State.Gas) return false;
+      if (blocksFalling(mat[gy * w + gx])) return false;
     }
     return true;
   }
 
   /** Stamp the body back into the grid; scatter debris on a hard landing. */
+  /** Try to move the liquid at (x,y) to a nearby open cell so it isn't lost. */
+  private shoveLiquid(x: number, y: number): void {
+    const { world } = this;
+    const src = world.idx(x, y);
+    const liquid = world.mat[src];
+    const temp = world.temp[src];
+    const offs = [
+      [0, -1],
+      [-1, 0],
+      [1, 0],
+      [-1, -1],
+      [1, -1],
+    ];
+    for (const [ox, oy] of offs) {
+      const nx = x + ox;
+      const ny = y + oy;
+      if (!world.inBounds(nx, ny)) continue;
+      if (world.mat[world.idx(nx, ny)] === ID.AIR) {
+        world.convert(world.idx(nx, ny), liquid, temp);
+        return;
+      }
+    }
+    // No room: the liquid is displaced out of existence (minor volume loss).
+  }
+
   private land(body: RigidBody, particles: Particles, rng: Rng): void {
     const { world } = this;
     const { w, h } = world;
@@ -264,7 +297,12 @@ export class CollapseSystem {
       const gy = body.oy + body.dy[k];
       if (gx < 0 || gx >= w || gy < 0 || gy >= h) continue;
       const i = gy * w + gx;
-      if (world.mat[i] === ID.AIR || material(world.mat[i]).state === State.Gas) {
+      // Stamp into anything that doesn't block a falling solid (air/gas/liquid).
+      // Liquid at the target is nudged aside first so it isn't simply deleted.
+      if (!blocksFalling(world.mat[i])) {
+        if (material(world.mat[i]).state === State.Liquid) {
+          this.shoveLiquid(gx, gy);
+        }
         if (hard && rng.next() < 0.18) {
           particles.spawn(
             gx + 0.5,

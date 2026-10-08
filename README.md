@@ -37,9 +37,9 @@ Two modes, toggled with **Tab**:
 
 | Input | Action |
 | --- | --- |
-| **WASD / arrows** | Fly (momentum-based) |
+| **WASD / arrows** | Fly (momentum-based) — the hero plows *through* terrain, carving and collapsing it |
 | **Mouse** | Aim |
-| **Left mouse** | Use the selected power |
+| **Left mouse** | Use the selected power (unlimited — no cooldowns) |
 | **1–9** or **wheel** | Switch power |
 | **Middle mouse** | Explode at the cursor |
 
@@ -159,16 +159,22 @@ src/
 When solids are damaged, the affected region is queued for a connectivity check.
 A flood-fill walks each connected-solid component; any component that no longer
 reaches the world floor (its anchor) is lifted out of the grid into a **rigid
-body** that falls under gravity and shatters back into cells on impact. Cost is
+body** that falls under gravity and shatters back into cells on impact. Falling
+solids (rigid bodies and debris) **sink through liquids and gases** — only
+solids and powders stop them. Cost is
 bounded: only damaged regions are checked (never the whole world), each
 component floods at most `MAX_COMPONENT` cells (so the ground is permanently
 anchored), and only a few regions are processed per tick.
 
 ### Hero & powers (Phase 4)
 
-The hero is an 8×12 flying sprite with momentum flight, AABB collision against
-solids, and health drained by heat, lava/fire, drowning and crushing (regen when
-safe). Every power acts directly on the simulation and lives in a data table
+The hero is an animated 8×12 flying sprite with momentum flight. Rather than
+colliding, he **flies through terrain** — solids he overlaps shatter into debris
+and the surrounding structure is flagged for collapse, so he tunnels destruction
+as he moves. Health is drained by heat, lava/fire, drowning and crushing (regen
+when safe). Powers have **no cooldowns**, and originate from a muzzle point just
+ahead of the hero so beams never cook him. Every power acts directly on the
+simulation and lives in a data table
 (`powers.ts`): **Heat Beam** (melts), **Freeze Breath** (freezes), **Water Jet**
 (emits water particles), **Lava Eruption**, **Earth Raise** (rock pillar),
 **Quake** (destabilises structures → collapse), **Lightning** (conducts through
@@ -199,7 +205,7 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
 
 ## Tests
 
-`npm run test` (35 tests) covers the physics and systems:
+`npm run test` (53 tests) covers the physics and systems:
 
 - **Movement:** powder falls/piles/conserves mass/forms a slope; water spreads
   to level and conserves volume; density displacement (sand sinks through water;
@@ -214,8 +220,11 @@ plus a per-cell shade jitter, blitted 1:1 to the canvas, then scaled up by CSS
 - **Collapse:** a floating component detaches into a body, an anchored one does
   not, blowing out a tower's base collapses its top, a fallen body re-enters the
   grid as cells.
-- **Hero:** momentum movement, can't pass solids/walls, takes lava damage,
-  regenerates when safe, respawns on death.
+- **Hero:** momentum movement, stays in bounds, carves through solid terrain,
+  takes lava damage, regenerates when safe, respawns on death.
+- **Powers:** every power fires without error and affects the world; the muzzle
+  offset keeps the Heat Beam off the hero's own cell; per-power checks for lava
+  eruption, earth raise, quake debris, lightning conduction, wind lift, slam.
 
 ---
 

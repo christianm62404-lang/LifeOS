@@ -50,13 +50,13 @@ export const PARTICLE_GRAVITY = 0.18;
 
 /** Connected-solid components larger than this are treated as anchored
  * terrain (bounds the flood-fill cost; the ground never "falls"). */
-export const MAX_COMPONENT = 3000;
+export const MAX_COMPONENT = 2200;
 
 /** Max simultaneous rigid bodies in flight. */
 export const MAX_BODIES = 64;
 
 /** Collapse-check regions processed per tick (bounds per-frame work). */
-export const MAX_REGIONS_PER_TICK = 6;
+export const MAX_REGIONS_PER_TICK = 4;
 
 /** Gravity + terminal fall speed for rigid bodies (cells/tick). */
 export const BODY_GRAVITY = 0.22;
